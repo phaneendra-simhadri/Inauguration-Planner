@@ -2365,13 +2365,16 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
                 faculty_row_data = [self._normalize_excel_text(sheet.cell(row + 2, col).value) for col in range(1, sheet.max_column + 1)] if row + 2 <= sheet.max_row else []
 
                 for col, section_name in section_headers:
-                    if col >= len(event_row_data):
+                    idx = col - 1  # section_headers uses 1-indexed column numbers, but
+                                    # event_row_data/venue_row_data/faculty_row_data are
+                                    # 0-indexed lists built from column 1..max_column
+                    if idx < 0 or idx >= len(event_row_data):
                         continue
-                    event_name = event_row_data[col]
+                    event_name = event_row_data[idx]
                     if not event_name or event_name.lower() in {'event', 'venue', 'faculty assigned', 'faculty', 'inauguration'}:
                         continue
-                    venue = venue_row_data[col] if col < len(venue_row_data) else ''
-                    faculty = faculty_row_data[col] if col < len(faculty_row_data) else ''
+                    venue = venue_row_data[idx] if idx < len(venue_row_data) else ''
+                    faculty = faculty_row_data[idx] if idx < len(faculty_row_data) else ''
                     self.create_event_from_excel(db, date_str, period_no, event_name, section_name, venue, faculty)
                     created_count += 1
 
