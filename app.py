@@ -1574,9 +1574,9 @@ loadBranches();
 </div>
 
 <div class="row g-4 mb-4">
-    <!-- Top Row - Left Column: Settings and Trigger Controls -->
-    <div class="col-lg-8">
-        <div class="card h-100">
+    <!-- Top Row: Settings and Trigger Controls -->
+    <div class="col-12">
+        <div class="card">
             <div class="card-header bg-white pt-4 px-4 border-bottom-0">
                 <h5 class="fw-bold mb-0">Settings &amp; Scheduler Configuration</h5>
             </div>
@@ -1624,21 +1624,6 @@ loadBranches();
                         <button type="submit" class="btn btn-primary">Save Settings</button>
                     </div>
                 </form>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Top Row - Right Column: Manual Reminders Trigger -->
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header bg-white pt-4 px-4 border-bottom-0">
-                <h5 class="fw-bold mb-0">Manual Reminders Trigger</h5>
-            </div>
-            <div class="card-body px-4 pb-4 d-flex flex-column justify-content-between">
-                <div>
-                    <p class="text-muted small mb-4">Need to send tomorrow's reminders right now? Click the button below to process the queue immediately.</p>
-                </div>
-                <button type="button" class="btn btn-outline-primary w-100 py-3 fw-bold" id="triggerRemindersBtn">Trigger Reminders Now</button>
             </div>
         </div>
     </div>
@@ -1738,30 +1723,6 @@ document.addEventListener('DOMContentLoaded', function() {{
             }});
         }});
     }}
-    
-    // Trigger reminders
-    const triggerRemindersBtn = document.getElementById('triggerRemindersBtn');
-    if (triggerRemindersBtn) {{
-        triggerRemindersBtn.addEventListener('click', function() {{
-            triggerRemindersBtn.disabled = true;
-            triggerRemindersBtn.textContent = 'Triggering...';
-            
-            fetch('/send-reminders', {{ method: 'POST' }})
-            .then(res => res.json())
-            .then(data => {{
-                triggerRemindersBtn.disabled = false;
-                triggerRemindersBtn.textContent = 'Trigger Reminders Now';
-                if (data.success) {{
-                    showToast(data.message || 'Reminder emails triggered successfully!', 'success');
-                }} else {{
-                    showToast(data.message || 'Failed to send reminders.', 'danger');
-                }}
-            }})
-            .catch(err => {{
-                triggerRemindersBtn.disabled = false;
-                triggerRemindersBtn.textContent = 'Trigger Reminders Now';
-                showToast('Failed to trigger reminders.', 'danger');
-            }});
     
     // Audit logs search filter
     const auditSearchInput = document.getElementById('auditSearchInput');
