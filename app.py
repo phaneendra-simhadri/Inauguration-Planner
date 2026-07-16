@@ -1764,66 +1764,74 @@ document.addEventListener('DOMContentLoaded', function() {{
 
     'event_list': '''
 <div class="events-list-page">
-<div class="page-hero">
-    <div class="page-title-block">
-        <p class="page-kicker">Events</p>
-        <h2 class="mb-1">Scheduled Events</h2>
-        <p class="text-muted mb-0">Search, filter, and review programs without losing context.</p>
-    </div>
-    <div class="page-toolbar">
-        <a href="/create-event" class="btn btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="me-1">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            Create Event
-        </a>
+<div class="page-hero mb-4">
+    <div class="d-flex justify-content-between align-items-center w-100 flex-wrap gap-3">
+        <div class="page-title-block">
+            <p class="page-kicker">Events</p>
+            <h2 class="mb-1">Scheduled Events</h2>
+            <p class="text-muted mb-0">Search, filter, and review programs without losing context.</p>
+        </div>
+        <div>
+            <a href="/create-event" class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                Create Event
+            </a>
+        </div>
     </div>
 </div>
-<div class="card mb-4">
-    <div class="card-body">
-        <form method="GET" action="/events" class="list-toolbar">
-            <div class="row g-3">
-                <div class="col-lg-5 col-md-12">
-                    <label class="form-label">Search</label>
-                    <div class="input-group">
+
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body p-3 bg-light rounded">
+        <form method="GET" action="/events" class="m-0">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-3 col-md-6 col-12">
+                    <label class="form-label small fw-bold text-muted mb-1">Search Keyword</label>
+                    <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white border-end-0 text-muted">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                                 <circle cx="11" cy="11" r="8"/>
                                 <path d="m21 21-4.3-4.3"/>
                             </svg>
                         </span>
-                        <input type="search" name="q" class="form-control border-start-0 ps-0" value="{search_filter}" placeholder="Search event name, host, remarks, faculty...">
+                        <input type="search" name="q" class="form-control border-start-0 ps-0" value="{search_filter}" placeholder="Search events, remarks...">
                     </div>
                 </div>
-                <div class="col-lg-7 col-md-12">
-                    <div class="row g-2">
-                        <div class="col-sm-2 col-6">
-                            <label class="form-label">From</label>
-                            <input type="date" name="date_from" class="form-control" value="{date_from}">
-                        </div>
-                        <div class="col-sm-2 col-6">
-                            <label class="form-label">To</label>
-                            <input type="date" name="date_to" class="form-control" value="{date_to}">
-                        </div>
-                        <div class="col-sm-3 col-6">
-                            <label class="form-label">Event Type</label>
-                            <select name="event_type" class="form-select">{type_options}</select>
-                        </div>
-                        <div class="col-sm-3 col-6">
-                            <label class="form-label">Venue</label>
-                            <select name="hall_id" class="form-select">{hall_options}</select>
-                        </div>
-                        <div class="col-sm-2 col-6">
-                            <label class="form-label">Section</label>
-                            <select name="section_id" class="form-select">{section_options}</select>
-                        </div>
-                    </div>
+                
+                <div class="col-lg-2 col-md-3 col-6">
+                    <label class="form-label small fw-bold text-muted mb-1">From Date</label>
+                    <input type="date" name="date_from" class="form-control form-control-sm" value="{date_from}">
+                </div>
+                
+                <div class="col-lg-2 col-md-3 col-6">
+                    <label class="form-label small fw-bold text-muted mb-1">To Date</label>
+                    <input type="date" name="date_to" class="form-control form-control-sm" value="{date_to}">
+                </div>
+                
+                <div class="col-lg-2 col-md-4 col-6">
+                    <label class="form-label small fw-bold text-muted mb-1">Event Type</label>
+                    <select name="event_type" class="form-select form-select-sm">{type_options}</select>
+                </div>
+                
+                <div class="col-lg-2 col-md-4 col-6">
+                    <label class="form-label small fw-bold text-muted mb-1">Venue / Hall</label>
+                    <select name="hall_id" class="form-select form-select-sm">{hall_options}</select>
+                </div>
+                
+                <div class="col-lg-1 col-md-4 col-6">
+                    <label class="form-label small fw-bold text-muted mb-1">Section</label>
+                    <select name="section_id" class="form-select form-select-sm">{section_options}</select>
                 </div>
             </div>
-            <div class="d-flex justify-content-end gap-2 mt-3">
-                <a href="/events" class="btn btn-outline-secondary">Reset Filters</a>
-                <button type="submit" class="btn btn-primary">Apply Filters</button>
+            
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top border-light flex-wrap gap-2">
+                <div id="resultCount" class="small text-muted fw-semibold">Loading...</div>
+                <div class="d-flex gap-2">
+                    <a href="/events" class="btn btn-sm btn-outline-secondary px-3">Reset Filters</a>
+                    <button type="submit" class="btn btn-sm btn-primary px-3">Apply Filters</button>
+                </div>
             </div>
         </form>
     </div>
