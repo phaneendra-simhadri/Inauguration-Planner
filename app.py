@@ -1254,44 +1254,44 @@ loadBranches();
 <div class="row mb-4">
     <div class="col-12">
         <h2>Import Events from Excel</h2>
-        <p class="text-muted">Upload an Excel file containing the schedule to automatically create events.</p>
+        <p class="text-muted">Upload a schedule workbook to bulk import and create events automatically.</p>
     </div>
 </div>
 <div class="row justify-content-center">
     <div class="col-lg-8">
-        <div class="card">
+        <div class="card mb-4">
             <div class="card-body">
                 <form action="/upload-excel" method="POST" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label for="excelFile" class="form-label">Select Excel File</label>
+                    <div class="mb-4">
+                        <label for="excelFile" class="form-label fw-bold">Select Excel File</label>
                         <input type="file" class="form-control" id="excelFile" name="excelFile" accept=".xlsx,.xls" required>
-                        <div class="form-text">Upload the schedule Excel file. It should contain sheets for each date with the schedule.</div>
+                        <div class="form-text mt-2 text-muted">Select an Excel workbook containing sheets named by date (e.g. 16.7).</div>
                     </div>
-                    <div class="mb-3 form-check">
+                    
+                    <div class="mb-4 bg-light p-3 rounded border">
+                        <h6 class="fw-bold mb-2">Excel Template</h6>
+                        <p class="text-muted small mb-3">Download the pre-formatted schedule Excel template to reference or fill in your schedule data.</p>
+                        <a href="/upload-excel/template" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Download Schedule Template
+                        </a>
+                    </div>
+                    
+                    <div class="mb-4 form-check">
                         <input type="checkbox" class="form-check-input" id="clearExisting" name="clearExisting">
-                        <label class="form-check-label" for="clearExisting">Clear existing events before importing</label>
+                        <label class="form-check-label text-danger fw-bold" for="clearExisting">Clear existing events before importing</label>
+                        <div class="form-text text-muted">Warning: This will delete all currently scheduled events from the database.</div>
                     </div>
+                    
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-primary">Upload and Import</button>
                         <a href="/" class="btn btn-secondary">Cancel</a>
                     </div>
                 </form>
-            </div>
-        </div>
-        <div class="card mt-4">
-            <div class="card-header">
-                <h5 class="mb-0">Instructions</h5>
-            </div>
-            <div class="card-body">
-                <ol class="mb-0">
-                    <li>The Excel file should have sheets named with dates (e.g., "16.7", "17.7", etc.)</li>
-                    <li>Each sheet should have the schedule in a grid format with columns for each section</li>
-                    <li>The first row should contain the date</li>
-                    <li>The second row should contain section headers (e.g., "CSE A", "CSE B", etc.)</li>
-                    <li>Each time slot row should have: Event name, Venue, Faculty Assigned</li>
-                    <li>Events will be created with the event name, date, time slot, and branch/section</li>
-                    <li>Faculty and venue details will be stored in remarks for reference</li>
-                </ol>
             </div>
         </div>
     </div>
@@ -2214,6 +2214,8 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_event_list(query)
         elif path == '/upload-excel':
             self.handle_upload_excel_get()
+        elif path == '/upload-excel/template':
+            self.handle_upload_excel_template_download()
         elif re.match(r'^/event/(\d+)$', path):
             event_id = int(re.match(r'^/event/(\d+)$', path).group(1))
             self.handle_event_detail(event_id)
@@ -2353,6 +2355,22 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
     def handle_upload_excel_get(self):
         html = self.render_template('upload_excel', title='Import Excel')
         self.send_html(html)
+ 
+    def handle_upload_excel_template_download(self):
+        file_path = os.path.join(UPLOAD_DIR, '2026 Induction Schedule - Copy.xlsx')
+        if not os.path.exists(file_path):
+            self.send_error(404, "Template file not found")
+            return
+            
+        with open(file_path, 'rb') as f:
+            file_data = f.read()
+            
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.send_header('Content-Disposition', 'attachment; filename="induction_schedule_template.xlsx"')
+        self.send_header('Content-Length', str(len(file_data)))
+        self.end_headers()
+        self.wfile.write(file_data)
 
     def handle_upload_excel_post(self):
         try:
