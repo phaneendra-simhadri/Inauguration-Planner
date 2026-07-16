@@ -212,21 +212,37 @@ def send_tomorrow_event_reminders():
         db.close()
 
 
+def get_scheduler_time():
+    try:
+        db = sqlite3.connect(DATABASE)
+        db.row_factory = sqlite3.Row
+        row = db.execute("SELECT value FROM settings WHERE key = 'gmail_reminders_time'").fetchone()
+        db.close()
+        if row and row['value']:
+            parts = row['value'].split(':')
+            if len(parts) == 2:
+                return int(parts[0]), int(parts[1])
+    except Exception:
+        pass
+    return REMINDER_HOUR, REMINDER_MINUTE
+ 
 def run_daily_email_scheduler():
     while True:
         try:
             now = datetime.now()
-            target = now.replace(hour=REMINDER_HOUR, minute=REMINDER_MINUTE, second=0, microsecond=0)
+            hour, minute = get_scheduler_time()
+            target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if now > target:
                 target += timedelta(days=1)
-
+ 
             sleep_seconds = max(1, int((target - now).total_seconds()))
             if sleep_seconds > 60:
                 sleep_seconds = 60
             time.sleep(sleep_seconds)
-
+ 
             current_time = datetime.now()
-            if current_time.hour == REMINDER_HOUR and current_time.minute == REMINDER_MINUTE:
+            hour, minute = get_scheduler_time()
+            if current_time.hour == hour and current_time.minute == minute:
                 print(f"Reminder scheduler triggered at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 send_tomorrow_event_reminders()
                 time.sleep(65)
@@ -1520,137 +1536,91 @@ loadBranches();
     <div class="page-title-block">
         <p class="page-kicker">Automation</p>
         <h2 class="mb-1">Gmail Notification Portal</h2>
-        <p class="text-muted mb-0">Configure Gmail SMTP credentials, trigger reminders, and broadcast announcements to faculty.</p>
+        <p class="text-muted mb-0">Configure Gmail SMTP credentials, set daily automation times, and track delivery logs.</p>
     </div>
 </div>
 
 <div class="row g-4">
-    <!-- Left Column: Navigation Tabs -->
-    <div class="col-md-3">
+    <!-- Left Column: Settings and Trigger Controls -->
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header bg-white pt-4 px-4 border-bottom-0">
+                <h5 class="fw-bold mb-0">Settings &amp; Scheduler Configuration</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <form id="smtpSettingsForm" action="/gmail-automation/save-settings" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Gmail SMTP Username (Email)</label>
+                        <input type="email" name="gmail_username" class="form-control" value="{gmail_username}" placeholder="your.name@gmail.com" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Gmail App Password</label>
+                        <input type="password" name="gmail_password" class="form-control" value="{gmail_password}" placeholder="xxxx xxxx xxxx xxxx" required>
+                        <div class="form-text text-muted">Generate a 16-character Google App Password in your Google Account security settings.</div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Sender Display Name</label>
+                            <input type="text" name="gmail_from_name" class="form-control" value="{gmail_from_name}" placeholder="e.g. Inauguration Committee" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Sender Reply-To Email</label>
+                            <input type="email" name="gmail_from_email" class="form-control" value="{gmail_from_email}" placeholder="your.name@gmail.com" required>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h6 class="fw-bold mb-3 text-primary">Daily Reminder Automation</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-7">
+                            <div class="form-check mt-2">
+                                <input type="checkbox" class="form-check-input" id="gmailRemindersEnabled" name="gmail_reminders_enabled" {gmail_reminders_enabled_checked}>
+                                <label class="form-check-label fw-bold" for="gmailRemindersEnabled">Enable Daily Reminder Emails</label>
+                                <div class="form-text small text-muted">Automatically send schedule updates to faculty.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small fw-bold">Trigger Time (HH:MM)</label>
+                            <input type="time" name="gmail_reminders_time" class="form-control" value="{gmail_reminders_time}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between gap-2">
+                        <button type="button" class="btn btn-outline-secondary" id="testSmtpBtn">Test Connection</button>
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
         <div class="card">
-            <div class="list-group list-group-flush" id="gmailTabs" role="tablist">
-                <button class="list-group-item list-group-item-action active fw-bold py-3" id="tab-broadcast-btn" data-bs-toggle="pill" data-bs-target="#tab-broadcast" type="button" role="tab">
-                    📢 Broadcast Campaign
-                </button>
-                <button class="list-group-item list-group-item-action fw-bold py-3" id="tab-settings-btn" data-bs-toggle="pill" data-bs-target="#tab-settings" type="button" role="tab">
-                    ⚙️ Gmail SMTP Settings
-                </button>
-                <button class="list-group-item list-group-item-action fw-bold py-3" id="tab-logs-btn" data-bs-toggle="pill" data-bs-target="#tab-logs" type="button" role="tab">
-                    📜 Mail Delivery Logs
-                </button>
+            <div class="card-header bg-white pt-4 px-4 border-bottom-0">
+                <h5 class="fw-bold mb-0">Manual Reminders Trigger</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <p class="text-muted small">Need to send tomorrow's reminders right now? Click the button below to process the queue immediately.</p>
+                <button type="button" class="btn btn-outline-primary" id="triggerRemindersBtn">Trigger Reminders Now</button>
             </div>
         </div>
     </div>
     
-    <!-- Right Column: Tab Content -->
-    <div class="col-md-9">
-        <div class="tab-content" id="gmailTabsContent">
-            <!-- Tab 1: Broadcast Campaign -->
-            <div class="tab-pane fade show active" id="tab-broadcast" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Broadcast Email Announcement</h5></div>
-                    <div class="card-body px-4 pb-4">
-                        <form id="broadcastForm" action="/gmail-automation/send-campaign" method="POST">
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">Select Target Faculty Coordinators</label>
-                                <div class="border rounded p-3 bg-light" style="max-height: 220px; overflow-y: auto;">
-                                    <div class="form-check mb-2 pb-2 border-bottom">
-                                        <input class="form-check-input" type="checkbox" id="selectAllFaculty">
-                                        <label class="form-check-label fw-bold" for="selectAllFaculty">Select All Faculty</label>
-                                    </div>
-                                    <div class="row">
-                                        {faculty_checkbox_list}
-                                    </div>
-                                </div>
-                                <div class="form-text">Choose coordinators to receive this broadcast. Only faculty with configured emails will be sent.</div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">Email Subject</label>
-                                <input type="text" name="subject" class="form-control" placeholder="e.g. Schedule Update: Inauguration Date Shifted" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">Email Body Message</label>
-                                <textarea name="body" class="form-control" rows="8" placeholder="Write your announcement details here..." required></textarea>
-                            </div>
-                            <div class="d-flex justify-content-end">
-                                <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2" id="sendBroadcastBtn">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                                    </svg>
-                                    Send Announcement
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+    <!-- Right Column: Audit Logs -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white pt-4 px-4 border-bottom-0">
+                <h5 class="fw-bold mb-0">Mail Delivery Audit Trail</h5>
             </div>
-            
-            <!-- Tab 2: Settings -->
-            <div class="tab-pane fade" id="tab-settings" role="tabpanel">
-                <div class="card mb-4">
-                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Gmail SMTP Configurations</h5></div>
-                    <div class="card-body px-4 pb-4">
-                        <form id="smtpSettingsForm" action="/gmail-automation/save-settings" method="POST">
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Gmail SMTP Username (Email)</label>
-                                    <input type="email" name="gmail_username" class="form-control" value="{gmail_username}" placeholder="your.name@gmail.com" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Gmail App Password</label>
-                                    <input type="password" name="gmail_password" class="form-control" value="{gmail_password}" placeholder="xxxx xxxx xxxx xxxx" required>
-                                    <div class="form-text text-muted">Generate a 16-character Google App Password in your Google Account settings.</div>
-                                </div>
-                            </div>
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Sender Display Name</label>
-                                    <input type="text" name="gmail_from_name" class="form-control" value="{gmail_from_name}" placeholder="e.g. Inauguration Committee" required>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-bold">Sender Reply-To Email</label>
-                                    <input type="email" name="gmail_from_email" class="form-control" value="{gmail_from_email}" placeholder="your.name@gmail.com" required>
-                                </div>
-                            </div>
-                            <div class="mb-4 form-check">
-                                <input type="checkbox" class="form-check-input" id="gmailRemindersEnabled" name="gmail_reminders_enabled" {gmail_reminders_enabled_checked}>
-                                <label class="form-check-label fw-bold" for="gmailRemindersEnabled">Enable Automated Daily Reminder Emails</label>
-                                <div class="form-text">If enabled, the system will verify schedules and send reminders to faculty 1 day before their programs.</div>
-                            </div>
-                            <div class="d-flex justify-content-between">
-                                <button type="button" class="btn btn-outline-secondary" id="testSmtpBtn">Test Connection</button>
-                                <button type="submit" class="btn btn-primary">Save Settings</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Manual Reminders Trigger</h5></div>
-                    <div class="card-body px-4 pb-4">
-                        <p class="text-muted small">Need to send tomorrow's reminders right now? Click the button below to process the reminder queue immediately.</p>
-                        <button type="button" class="btn btn-outline-primary" id="triggerRemindersBtn">Trigger Reminders Now</button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Tab 3: Logs -->
-            <div class="tab-pane fade" id="tab-logs" role="tabpanel">
-                <div class="card">
-                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Mail Delivery Audit Trail</h5></div>
-                    <div class="card-body px-4 pb-4">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                    <tr><th>Recipient</th><th>Subject</th><th>Sent At</th><th>Status</th></tr>
-                                </thead>
-                                <tbody>
-                                    {email_log_rows}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+            <div class="card-body px-4 pb-4 d-flex flex-column">
+                <div class="table-responsive flex-grow-1" style="max-height: 580px;">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr><th>Recipient</th><th>Subject</th><th>Sent At</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            {email_log_rows}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1659,64 +1629,6 @@ loadBranches();
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {{
-    const selectAllCheckbox = document.getElementById('selectAllFaculty');
-    const facultyCheckboxes = document.querySelectorAll('.faculty-checkbox');
-    if (selectAllCheckbox) {{
-        selectAllCheckbox.addEventListener('change', function() {{
-            facultyCheckboxes.forEach(cb => cb.checked = this.checked);
-        }});
-    }}
-    
-    // Broadcast submit
-    const broadcastForm = document.getElementById('broadcastForm');
-    if (broadcastForm) {{
-        broadcastForm.addEventListener('submit', function(e) {{
-            e.preventDefault();
-            const submitBtn = document.getElementById('sendBroadcastBtn');
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Sending...';
-            
-            const formData = new FormData(this);
-            const facultyIds = [];
-            document.querySelectorAll('.faculty-checkbox:checked').forEach(cb => facultyIds.push(cb.value));
-            
-            const payload = {{
-                subject: formData.get('subject'),
-                body: formData.get('body'),
-                faculty_ids: facultyIds
-            }};
-            
-            fetch('/gmail-automation/send-campaign', {{
-                method: 'POST',
-                headers: {{ 'Content-Type': 'application/json' }},
-                body: JSON.stringify(payload)
-            }})
-            .then(res => res.json())
-            .then(data => {{
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                    Send Announcement
-                `;
-                if (data.success) {{
-                    showToast(data.message, 'success');
-                    broadcastForm.reset();
-                    if (selectAllCheckbox) selectAllCheckbox.checked = false;
-                }} else {{
-                    showToast(data.message, 'danger');
-                }}
-            }})
-            .catch(err => {{
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Send Announcement';
-                showToast('Failed to send broadcast.', 'danger');
-            }});
-        }});
-    }}
-    
     // Test SMTP
     const testSmtpBtn = document.getElementById('testSmtpBtn');
     if (testSmtpBtn) {{
@@ -1765,7 +1677,8 @@ document.addEventListener('DOMContentLoaded', function() {{
                 gmail_password: formData.get('gmail_password'),
                 gmail_from_name: formData.get('gmail_from_name'),
                 gmail_from_email: formData.get('gmail_from_email'),
-                gmail_reminders_enabled: formData.get('gmail_reminders_enabled') ? 'true' : 'false'
+                gmail_reminders_enabled: formData.get('gmail_reminders_enabled') ? 'true' : 'false',
+                gmail_reminders_time: formData.get('gmail_reminders_time')
             }};
             
             fetch('/gmail-automation/save-settings', {{
@@ -4867,21 +4780,6 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
  
     def handle_gmail_automation_get(self):
         db = get_db()
-        faculty_list = db.execute('SELECT id, faculty_name, department, email FROM faculty WHERE email IS NOT NULL AND email != "" ORDER BY department, faculty_name').fetchall()
-        
-        checkbox_list = ''
-        for f in faculty_list:
-            checkbox_list += f'''
-            <div class="col-md-6 mb-2">
-                <div class="form-check">
-                    <input class="form-check-input faculty-checkbox" type="checkbox" value="{f['id']}" id="fac_{f['id']}">
-                    <label class="form-check-label small" for="fac_{f['id']}">
-                        {display_text(f['faculty_name'])} <span class="text-muted">({display_text(f['department'])} - {display_text(f['email'])})</span>
-                    </label>
-                </div>
-            </div>
-            '''
-            
         # Get settings values
         settings = {}
         rows = db.execute('SELECT key, value FROM settings').fetchall()
@@ -4894,6 +4792,7 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         gmail_from_email = settings.get('gmail_from_email') or SMTP_FROM_EMAIL
         gmail_reminders_enabled = settings.get('gmail_reminders_enabled', 'true')
         gmail_reminders_enabled_checked = 'checked' if gmail_reminders_enabled.lower() == 'true' else ''
+        gmail_reminders_time = settings.get('gmail_reminders_time') or f"{REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d}"
         
         # Get recent log rows
         logs = db.execute('SELECT * FROM email_log ORDER BY sent_at DESC LIMIT 50').fetchall()
@@ -4915,12 +4814,12 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         
         html = self.render_template('gmail_automation',
             title='Gmail Automation',
-            faculty_checkbox_list=checkbox_list,
             gmail_username=escape_html(gmail_username),
             gmail_password=escape_html(gmail_password),
             gmail_from_name=escape_html(gmail_from_name),
             gmail_from_email=escape_html(gmail_from_email),
             gmail_reminders_enabled_checked=gmail_reminders_enabled_checked,
+            gmail_reminders_time=escape_html(gmail_reminders_time),
             email_log_rows=log_rows)
             
         self.send_html(html)
@@ -4933,6 +4832,7 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             from_name = payload.get('gmail_from_name', '').strip()
             from_email = payload.get('gmail_from_email', '').strip()
             reminders_enabled = payload.get('gmail_reminders_enabled', 'true')
+            reminders_time = payload.get('gmail_reminders_time', '18:00').strip()
             
             db = get_db()
             db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_username', username))
@@ -4940,10 +4840,11 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_from_name', from_name))
             db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_from_email', from_email))
             db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_reminders_enabled', reminders_enabled))
+            db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_reminders_time', reminders_time))
             db.commit()
             db.close()
             
-            self.send_json({'success': True, 'message': 'Gmail SMTP settings saved successfully!'})
+            self.send_json({'success': True, 'message': 'Gmail SMTP settings and daily automation time saved successfully!'})
         except Exception as e:
             self.send_json({'success': False, 'message': f'Failed to save settings: {str(e)}'})
  
