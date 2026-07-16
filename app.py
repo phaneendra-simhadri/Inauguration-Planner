@@ -1573,10 +1573,10 @@ loadBranches();
     </div>
 </div>
 
-<div class="row g-4">
-    <!-- Left Column: Settings and Trigger Controls -->
-    <div class="col-lg-6">
-        <div class="card mb-4">
+<div class="row g-4 mb-4">
+    <!-- Top Row - Left Column: Settings and Trigger Controls -->
+    <div class="col-lg-8">
+        <div class="card h-100">
             <div class="card-header bg-white pt-4 px-4 border-bottom-0">
                 <h5 class="fw-bold mb-0">Settings &amp; Scheduler Configuration</h5>
             </div>
@@ -1626,36 +1626,42 @@ loadBranches();
                 </form>
             </div>
         </div>
-        
-        <div class="card">
+    </div>
+    
+    <!-- Top Row - Right Column: Manual Reminders Trigger -->
+    <div class="col-lg-4">
+        <div class="card h-100">
             <div class="card-header bg-white pt-4 px-4 border-bottom-0">
                 <h5 class="fw-bold mb-0">Manual Reminders Trigger</h5>
             </div>
-            <div class="card-body px-4 pb-4">
-                <p class="text-muted small">Need to send tomorrow's reminders right now? Click the button below to process the queue immediately.</p>
-                <button type="button" class="btn btn-outline-primary" id="triggerRemindersBtn">Trigger Reminders Now</button>
+            <div class="card-body px-4 pb-4 d-flex flex-column justify-content-between">
+                <div>
+                    <p class="text-muted small mb-4">Need to send tomorrow's reminders right now? Click the button below to process the queue immediately.</p>
+                </div>
+                <button type="button" class="btn btn-outline-primary w-100 py-3 fw-bold" id="triggerRemindersBtn">Trigger Reminders Now</button>
             </div>
         </div>
     </div>
-    
-    <!-- Right Column: Audit Logs -->
-    <div class="col-lg-6">
-        <div class="card h-100">
-            <div class="card-header bg-white pt-4 px-4 border-bottom-0">
-                <h5 class="fw-bold mb-0">Mail Delivery Audit Trail</h5>
-            </div>
-            <div class="card-body px-4 pb-4 d-flex flex-column">
-                <div class="table-responsive flex-grow-1" style="max-height: 580px;">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr><th>Recipient</th><th>Subject</th><th>Sent At</th><th>Status</th></tr>
-                        </thead>
-                        <tbody>
-                            {email_log_rows}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+</div>
+
+<!-- Bottom Row: Audit Logs full width -->
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-header bg-white pt-4 px-4 border-bottom-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="fw-bold mb-0">Mail Delivery Audit Trail</h5>
+        <div style="min-width: 280px;">
+            <input type="search" id="auditSearchInput" class="form-control form-control-sm" placeholder="Search logs by recipient, subject, status...">
+        </div>
+    </div>
+    <div class="card-body px-4 pb-4">
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+            <table class="table table-hover" id="auditTable">
+                <thead>
+                    <tr><th>Recipient</th><th>Subject</th><th>Sent At</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {email_log_rows}
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -1755,6 +1761,21 @@ document.addEventListener('DOMContentLoaded', function() {{
                 triggerRemindersBtn.disabled = false;
                 triggerRemindersBtn.textContent = 'Trigger Reminders Now';
                 showToast('Failed to trigger reminders.', 'danger');
+            }});
+    
+    // Audit logs search filter
+    const auditSearchInput = document.getElementById('auditSearchInput');
+    if (auditSearchInput) {{
+        auditSearchInput.addEventListener('input', function() {{
+            const query = this.value.toLowerCase().trim();
+            const rows = document.querySelectorAll('.audit-row');
+            rows.forEach(row => {{
+                const searchVal = row.dataset.search || '';
+                if (searchVal.includes(query)) {{
+                    row.style.display = '';
+                }} else {{
+                    row.style.display = 'none';
+                }}
             }});
         }});
     }}
@@ -4867,8 +4888,9 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         log_rows = ''
         for log in logs:
             status_badge = f'<span class="badge bg-success">Sent</span>' if log['status'] == 'Sent' else f'<span class="badge bg-danger" title="{escape_html(log["error_message"] or "")}">Failed</span>'
+            search_str = f"{log['recipient']} {log['subject']} {log['status']}".lower()
             log_rows += f'''
-            <tr>
+            <tr class="audit-row" data-search="{escape_html(search_str)}">
                 <td>{display_text(log['recipient'])}</td>
                 <td>{display_text(log['subject'])}</td>
                 <td>{display_text(log['sent_at'])}</td>
