@@ -1297,6 +1297,73 @@ loadBranches();
     </div>
 </div>
 ''',
+ 
+    'faculty_import': '''
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>Import Faculty from Excel</h2>
+        <p class="text-muted">Upload an Excel sheet to bulk import faculty members into the portal database directory.</p>
+    </div>
+</div>
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-body">
+                <form action="/faculty/import" method="POST" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label for="excelFile" class="form-label fw-bold">Select Excel File</label>
+                        <input type="file" class="form-control" id="excelFile" name="excelFile" accept=".xlsx,.xls" required>
+                        <div class="form-text mt-2 text-muted">Select an Excel workbook containing columns for Name, Department, Email, and Phone.</div>
+                    </div>
+                    
+                    <div class="mb-4 bg-light p-3 rounded border">
+                        <h6 class="fw-bold mb-2">Excel Template</h6>
+                        <p class="text-muted small mb-3">Download a pre-formatted Excel template with the required columns already configured.</p>
+                        <a href="/faculty/import/template" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Download Excel Template
+                        </a>
+                    </div>
+                    
+                    <div class="mb-4 form-check">
+                        <input type="checkbox" class="form-check-input" id="clearExisting" name="clearExisting">
+                        <label class="form-check-label text-danger fw-bold" for="clearExisting">Clear existing faculty directory before importing</label>
+                        <div class="form-text text-muted">Warning: This will delete all current faculty entries and their availability schedules.</div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Upload and Import</button>
+                        <a href="/faculty" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header bg-white pt-3 px-4 border-bottom-0">
+                <h5 class="mb-0 fw-bold">Import Guidelines</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <ol class="mb-0 text-muted" style="padding-left: 1.25rem;">
+                    <li class="mb-2">Ensure your sheet contains exactly 4 columns in the following order:
+                        <ul class="mt-1 small">
+                            <li><strong>Column A (Name):</strong> Full name of the faculty member (e.g. Dr. Rajesh Kumar). Prefix titles will be formatted automatically.</li>
+                            <li><strong>Column B (Department):</strong> Department name or code (e.g. CSE, ECE, EEE, Mechanical, IT).</li>
+                            <li><strong>Column C (Email):</strong> Unique institutional email address (e.g. rajesh@example.com). Used as a primary identifier.</li>
+                            <li><strong>Column D (Phone):</strong> Contact number or mobile number.</li>
+                        </ul>
+                    </li>
+                    <li class="mb-2">The first row of the Excel sheet will be treated as the headers and skipped automatically.</li>
+                    <li>If a faculty member with the same email or name already exists in the database, their record will be updated (merged) to prevent duplicates.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+''',
 
     'event_list': '''
 <div class="events-list-page">
@@ -1794,7 +1861,15 @@ loadEditBranches();
         <h2 class="mb-1">Faculty Directory</h2>
         <p class="text-muted mb-0">Search faculty by name, department, or contact details and keep responsibilities organized.</p>
     </div>
-    <div class="page-toolbar">
+    <div class="page-toolbar d-flex gap-2">
+        <a href="/faculty/import" class="btn btn-outline-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="me-1">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            Import Faculty
+        </a>
         <a href="/faculty/add" class="btn btn-primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="me-1">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1971,10 +2046,23 @@ document.addEventListener('DOMContentLoaded', function() {{
         <a href="/halls/add" class="btn btn-primary">+ Add Hall</a>
     </div>
 </div>
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0 text-muted">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.3-4.3"/>
+                </svg>
+            </span>
+            <input type="search" id="hallSearchInput" class="form-control border-start-0 ps-0" placeholder="Search by hall name...">
+        </div>
+    </div>
+</div>
 <div class="card">
     <div class="card-body">
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover" id="hallsTable">
                 <thead>
                     <tr><th>Hall Name</th><th>Capacity</th><th>Events Scheduled</th><th>Actions</th></tr>
                 </thead>
@@ -1985,6 +2073,28 @@ document.addEventListener('DOMContentLoaded', function() {{
         </div>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {{
+    const searchInput = document.getElementById('hallSearchInput');
+    const table = document.getElementById('hallsTable');
+    if (!table || !searchInput) return;
+    
+    const rows = table.querySelectorAll('tbody tr');
+    searchInput.addEventListener('input', function() {{
+        const query = searchInput.value.toLowerCase().trim();
+        rows.forEach(row => {{
+            const cells = row.getElementsByTagName('td');
+            if (cells.length === 0) return;
+            const hallName = cells[0].textContent.toLowerCase();
+            if (hallName.includes(query)) {{
+                row.style.display = '';
+            }} else {{
+                row.style.display = 'none';
+            }}
+        }});
+    }});
+}});
+</script>
 ''',
 
     'hall_form': '''
@@ -2112,6 +2222,10 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_edit_event_get(event_id)
         elif path == '/faculty':
             self.handle_faculty_list(query)
+        elif path == '/faculty/import':
+            self.handle_faculty_import_get()
+        elif path == '/faculty/import/template':
+            self.handle_faculty_template_download()
         elif path == '/faculty/add':
             self.handle_faculty_form()
         elif re.match(r'^/faculty/(\d+)/edit$', path):
@@ -2153,6 +2267,8 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             # For file uploads, we handle the raw data differently
             if path == '/upload-excel':
                 self.handle_upload_excel_post()
+            elif path == '/faculty/import':
+                self.handle_faculty_import_post()
             else:
                 self.send_error(404)
             return
@@ -2277,7 +2393,191 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({'success': False, 'message': f'Error processing file: {str(e)}'}, 500)
         except Exception as e:
             self.send_json({'success': False, 'message': f'Error: {str(e)}'}, 500)
-
+ 
+    def handle_faculty_import_get(self):
+        html = self.render_template('faculty_import', title='Import Faculty')
+        self.send_html(html)
+ 
+    def handle_faculty_template_download(self):
+        import openpyxl
+        import io
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Faculty Import Template"
+        
+        # Add headers
+        ws.append(["Name", "Department", "Email", "Phone"])
+        # Add samples
+        ws.append(["Dr. Rajesh Kumar", "CSE", "rajesh.kumar@example.com", "9876543210"])
+        ws.append(["Prof. Priya Sharma", "ECE", "priya.sharma@example.com", "9876543211"])
+        
+        # Save to memory stream
+        fp = io.BytesIO()
+        wb.save(fp)
+        fp.seek(0)
+        xlsx_data = fp.read()
+        
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.send_header('Content-Disposition', 'attachment; filename="faculty_import_template.xlsx"')
+        self.send_header('Content-Length', str(len(xlsx_data)))
+        self.end_headers()
+        self.wfile.write(xlsx_data)
+ 
+    def handle_faculty_import_post(self):
+        try:
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={'REQUEST_METHOD': 'POST',
+                         'CONTENT_TYPE': self.headers.get('Content-Type', '')}
+            )
+            
+            if 'excelFile' not in form:
+                self.send_redirect('/faculty/import', 'No file was uploaded.')
+                return
+                
+            fileitem = form['excelFile']
+            if not fileitem.filename:
+                self.send_redirect('/faculty/import', 'No file was selected.')
+                return
+                
+            clear_existing = 'clearExisting' in form
+            
+            # Save to temp file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+            temp_file.write(fileitem.file.read())
+            temp_file.close()
+            temp_path = temp_file.name
+                
+            try:
+                wb = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
+                sheet = wb.active
+                
+                rows_to_insert = []
+                headers_skipped = False
+                
+                for row in sheet.iter_rows(values_only=True):
+                    if not row:
+                        continue
+                    # Skip empty row
+                    if all(cell is None for cell in row):
+                        continue
+                        
+                    # Normalize columns
+                    row_cells = [str(cell).strip() if cell is not None else '' for cell in row]
+                    if len(row_cells) < 4:
+                        # Pad with empty strings if there are fewer than 4 cells in this row
+                        row_cells += [''] * (4 - len(row_cells))
+                    
+                    name, dept, email, phone = row_cells[0], row_cells[1], row_cells[2], row_cells[3]
+                    
+                    # If this looks like the header row, skip it
+                    if not headers_skipped:
+                        lower_name = name.lower()
+                        if 'name' in lower_name or 'faculty' in lower_name or lower_name == 'department' or lower_name == 'email' or lower_name == 'phone':
+                            headers_skipped = True
+                            continue
+                        headers_skipped = True
+                    
+                    if not name:
+                        continue
+                        
+                    # Standardize department
+                    valid_depts = {'CSE', 'CSE-AI', 'ECE', 'EEE', 'Mechanical', 'Civil', 'IT', 'General'}
+                    cleaned_dept = dept.upper() if dept else 'GENERAL'
+                    if cleaned_dept in ['CSE A', 'CSE B', 'CSE-A', 'CSE-B', 'CSE A SECTION', 'CSE B SECTION']:
+                        cleaned_dept = 'CSE'
+                    # Map common patterns
+                    if 'AIE' in cleaned_dept or 'AI' in cleaned_dept or 'ARTIFICIAL' in cleaned_dept:
+                        cleaned_dept = 'CSE-AI'
+                    elif 'MECH' in cleaned_dept:
+                        cleaned_dept = 'Mechanical'
+                    elif 'CIVIL' in cleaned_dept:
+                        cleaned_dept = 'Civil'
+                    elif 'IT' in cleaned_dept or 'INFORMATION' in cleaned_dept:
+                        cleaned_dept = 'IT'
+                    elif 'ECE' in cleaned_dept:
+                        cleaned_dept = 'ECE'
+                    elif 'EEE' in cleaned_dept:
+                        cleaned_dept = 'EEE'
+                    elif 'CSE' in cleaned_dept:
+                        cleaned_dept = 'CSE'
+                        
+                    # Title case depts if matching standard casing
+                    for d in valid_depts:
+                        if d.upper() == cleaned_dept.upper():
+                            cleaned_dept = d
+                            break
+                    if cleaned_dept not in valid_depts:
+                        cleaned_dept = 'General'
+                        
+                    # Clean faculty name prefix/dots
+                    cleaned_name = re.sub(r'^(Dr|Mr|Mrs|Ms|Prof)\.?\s*', r'\1. ', name, flags=re.IGNORECASE)
+                    cleaned_name = re.sub(r'\s+', ' ', cleaned_name).strip()
+                    
+                    cleaned_email = email.lower() if email else None
+                    cleaned_phone = phone if phone else None
+                    
+                    rows_to_insert.append((cleaned_name, cleaned_dept, cleaned_email, cleaned_phone))
+                
+                wb.close()
+                os.unlink(temp_path)
+                
+                if not rows_to_insert:
+                    self.send_redirect('/faculty/import', 'No valid faculty records found in Excel sheet.')
+                    return
+                
+                db = get_db()
+                if clear_existing:
+                    # Clear schedules and assignments
+                    db.execute('DELETE FROM event_faculty')
+                    db.execute('DELETE FROM faculty_availability')
+                    db.execute('DELETE FROM faculty_busy_slot')
+                    db.execute('DELETE FROM faculty')
+                
+                inserted_count = 0
+                updated_count = 0
+                for f_name, f_dept, f_email, f_phone in rows_to_insert:
+                    # Prevent duplicates by checking email or name
+                    existing = None
+                    if f_email:
+                        existing = db.execute('SELECT id FROM faculty WHERE email = ?', (f_email,)).fetchone()
+                    if not existing:
+                        existing = db.execute('SELECT id FROM faculty WHERE LOWER(faculty_name) = LOWER(?)', (f_name,)).fetchone()
+                        
+                    if existing:
+                        # Update existing details
+                        db.execute('''
+                            UPDATE faculty 
+                            SET department = ?, email = COALESCE(?, email), phone = COALESCE(?, phone) 
+                            WHERE id = ?
+                        ''', (f_dept, f_email, f_phone, existing['id']))
+                        updated_count += 1
+                    else:
+                        db.execute('''
+                            INSERT INTO faculty (faculty_name, department, email, phone) 
+                            VALUES (?, ?, ?, ?)
+                        ''', (f_name, f_dept, f_email, f_phone))
+                        inserted_count += 1
+                        
+                db.commit()
+                db.close()
+                
+                msg = f'Import completed: {inserted_count} imported, {updated_count} updated.'
+                self.send_redirect('/faculty', msg)
+                
+            except Exception as e:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise e
+                
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.send_redirect('/faculty/import', f'Import failed: {str(e)}')
+ 
     def _parse_sheet_date(self, sheet, sheet_name):
         for row in range(1, min(5, sheet.max_row + 1)):
             cell_val = sheet.cell(row, 1).value
