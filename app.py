@@ -1432,6 +1432,11 @@ document.getElementById('eventForm').addEventListener('submit', async function(e
  
 const facultySearchInput = document.getElementById('facultySearchInput');
 if (facultySearchInput) {{
+    facultySearchInput.addEventListener('keydown', function(event) {{
+        if (event.key === 'Enter') {{
+            event.preventDefault();
+        }}
+    }});
     facultySearchInput.addEventListener('input', function() {{
         const query = this.value.toLowerCase().trim();
         document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
@@ -2243,6 +2248,11 @@ document.getElementById('editEventForm').addEventListener('submit', async functi
  
 const facultySearchInput = document.getElementById('facultySearchInput');
 if (facultySearchInput) {{
+    facultySearchInput.addEventListener('keydown', function(event) {{
+        if (event.key === 'Enter') {{
+            event.preventDefault();
+        }}
+    }});
     facultySearchInput.addEventListener('input', function() {{
         const query = this.value.toLowerCase().trim();
         document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
