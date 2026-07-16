@@ -41,6 +41,33 @@ SMTP_USERNAME = os.environ.get('GMAIL_SMTP_USERNAME', '')
 SMTP_PASSWORD = os.environ.get('GMAIL_SMTP_PASSWORD', '')
 SMTP_FROM_EMAIL = os.environ.get('GMAIL_FROM_EMAIL','')
 SMTP_FROM_NAME = os.environ.get('GMAIL_FROM_NAME', 'Developer is testing this application')
+ 
+def get_smtp_settings():
+    try:
+        db = get_db()
+        settings = {}
+        rows = db.execute('SELECT key, value FROM settings').fetchall()
+        for row in rows:
+            settings[row['key']] = row['value']
+        db.close()
+    except Exception:
+        settings = {}
+ 
+    username = settings.get('gmail_username') or SMTP_USERNAME
+    password = settings.get('gmail_password') or SMTP_PASSWORD
+    from_email = settings.get('gmail_from_email') or SMTP_FROM_EMAIL
+    from_name = settings.get('gmail_from_name') or SMTP_FROM_NAME
+    reminders_enabled = settings.get('gmail_reminders_enabled', 'true').lower() == 'true'
+ 
+    return {
+        'host': SMTP_HOST,
+        'port': SMTP_PORT,
+        'username': username,
+        'password': password,
+        'from_email': from_email,
+        'from_name': from_name,
+        'reminders_enabled': reminders_enabled
+    }
 
 # Create upload directory
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -73,7 +100,7 @@ def parse_form_list(body, key):
 def build_tomorrow_event_reminders(db):
     tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
     reminder_date = date.today().strftime('%Y-%m-%d')
-
+ 
     events = db.execute('''
         SELECT e.id, e.event_name, e.event_type, e.description, e.conducted_by,
                e.date, e.participants, e.remarks, ts.start_time, ts.end_time, h.hall_name
@@ -83,10 +110,11 @@ def build_tomorrow_event_reminders(db):
         WHERE e.date = ?
         ORDER BY ts.period_no, e.event_name
     ''', (tomorrow,)).fetchall()
-
+ 
     if not events:
         return []
-
+ 
+    cfg = get_smtp_settings()
     messages = []
     for event in events:
         assigned_faculty = db.execute('''
@@ -95,11 +123,11 @@ def build_tomorrow_event_reminders(db):
             JOIN faculty f ON f.id = ef.faculty_id
             WHERE ef.event_id = ?
         ''', (event['id'],)).fetchall()
-
+ 
         for faculty in assigned_faculty:
             if not faculty['email']:
                 continue
-
+ 
             body_lines = [
                 f'Dear {faculty["faculty_name"]},',
                 '',
@@ -119,11 +147,11 @@ def build_tomorrow_event_reminders(db):
             ]
             message = EmailMessage()
             message['Subject'] = f'Reminder: {event["event_name"]} tomorrow'
-            message['From'] = f'{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>' if SMTP_FROM_NAME else SMTP_FROM_EMAIL
+            message['From'] = f'{cfg["from_name"]} <{cfg["from_email"]}>' if cfg["from_name"] else cfg["from_email"]
             message['To'] = faculty['email']
             message.set_content('\n'.join(body_lines))
             messages.append((faculty['email'], message))
-
+ 
     if messages:
         try:
             db.execute('INSERT INTO email_reminder_log (sent_date, summary) VALUES (?, ?)',
@@ -131,18 +159,20 @@ def build_tomorrow_event_reminders(db):
             db.commit()
         except sqlite3.IntegrityError:
             db.rollback()
-
+ 
     return messages
-
-
+ 
+ 
 def send_tomorrow_event_reminders():
-    if not REMINDER_ENABLED:
-        return
-
-    if not SMTP_USERNAME or not SMTP_PASSWORD:
+    cfg = get_smtp_settings()
+    if not cfg['reminders_enabled']:
+        print('Reminder emails skipped: Automated reminders are disabled in settings.')
+        return False
+ 
+    if not cfg['username'] or not cfg['password']:
         print('Reminder emails skipped: Gmail SMTP credentials are not configured.')
-        return
-
+        return False
+ 
     db = get_db()
     try:
         print('Building reminder messages...')
@@ -151,17 +181,25 @@ def send_tomorrow_event_reminders():
         if not messages:
             print('No reminder messages were built; skipping send.')
             return False
-
+ 
         print('Connecting to Gmail SMTP...')
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
+        with smtplib.SMTP(cfg['host'], cfg['port'], timeout=30) as smtp:
             smtp.ehlo()
             smtp.starttls()
             print('Logging into Gmail SMTP...')
-            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-            for _, message in messages:
+            smtp.login(cfg['username'], cfg['password'])
+            for recipient_email, message in messages:
                 print(f'Sending reminder to: {message["To"]}')
-                smtp.send_message(message)
-
+                try:
+                    smtp.send_message(message)
+                    # Log successful reminder
+                    db.execute('INSERT INTO email_log (recipient, subject, body, status) VALUES (?, ?, ?, ?)',
+                               (recipient_email, message['Subject'], message.get_content(), 'Sent'))
+                except Exception as inner_err:
+                    db.execute('INSERT INTO email_log (recipient, subject, body, status, error_message) VALUES (?, ?, ?, ?, ?)',
+                               (recipient_email, message['Subject'], message.get_content(), 'Failed', str(inner_err)))
+ 
+        db.commit()
         print(f'Reminder emails sent: {len(messages)}')
         return True
     except smtplib.SMTPAuthenticationError as exc:
@@ -315,6 +353,21 @@ def init_db():
             sent_date TEXT NOT NULL UNIQUE,
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             summary TEXT
+        );
+ 
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+ 
+        CREATE TABLE IF NOT EXISTS email_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            body TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error_message TEXT,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     ''')
 
@@ -607,6 +660,7 @@ TEMPLATES = {
                     <li class="nav-item"><a class="nav-link" href="/events">Events</a></li>
                     <li class="nav-item"><a class="nav-link" href="/faculty">Faculty</a></li>
                     <li class="nav-item"><a class="nav-link" href="/halls">Halls</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/gmail-automation">Gmail Automation</a></li>
                     <li class="nav-item"><a class="nav-link" href="/upload-excel">Import Excel</a></li>
                     <li class="nav-item"><a class="nav-link" href="/logout">Logout</a></li>
                 </ul>
@@ -622,7 +676,103 @@ TEMPLATES = {
             <small>Smart Event Scheduling &amp; Resource Allocation System</small>
         </div>
     </footer>
+
+    <!-- Global Toast Container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+        <div id="globalToast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="globalToastBody"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Toast Helper
+        function showToast(message, type = 'success') {{
+            const toastEl = document.getElementById('globalToast');
+            const toastBody = document.getElementById('globalToastBody');
+            if (!toastEl || !toastBody) return;
+            
+            toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info');
+            if (type === 'success') toastEl.classList.add('bg-success');
+            else if (type === 'danger') toastEl.classList.add('bg-danger');
+            else if (type === 'warning') toastEl.classList.add('bg-warning');
+            else toastEl.classList.add('bg-info');
+            
+            toastBody.textContent = message;
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }}
+
+        // Global Delete Form AJAX Interceptor
+        document.addEventListener('submit', function(event) {{
+            const form = event.target;
+            
+            // Check if form is a delete form
+            if (form.action && (form.action.endsWith('/delete') || form.action.includes('/delete?'))) {{
+                event.preventDefault();
+                
+                // Trigger confirm dialog only if not already confirmed (e.g. handled by inline onsubmit confirm)
+                const hasConfirm = form.getAttribute('onsubmit') && form.getAttribute('onsubmit').includes('confirm');
+                if (hasConfirm) {{
+                    // If it has confirm and we reached here, it means the user clicked 'OK' on standard browser confirm.
+                }} else {{
+                    if (!confirm('Are you sure you want to delete this item?')) {{
+                        return;
+                    }}
+                }}
+                
+                fetch(form.action, {{
+                    method: 'POST',
+                    headers: {{
+                        'Accept': 'application/json'
+                    }}
+                }})
+                .then(response => {{
+                    if (response.ok) {{
+                        return response.json();
+                    }} else {{
+                        throw new Error('Failed to delete item.');
+                    }}
+                }})
+                .then(data => {{
+                    if (data.success) {{
+                        // Find closest UI container to remove
+                        const row = form.closest('tr');
+                        const card = form.closest('.faculty-card-container') || form.closest('.card') || form.closest('.col-md-6') || form.closest('.col-lg-4');
+                        const target = row || card;
+                        if (target) {{
+                            target.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                            target.style.opacity = '0';
+                            target.style.transform = 'scale(0.95)';
+                            setTimeout(() => {{
+                                target.remove();
+                                // Update count elements if present
+                                const countEl = document.getElementById('resultCount') || document.getElementById('facultyResultCount') || document.getElementById('selectedDateCount');
+                                if (countEl) {{
+                                    const match = countEl.textContent.match(/\\d+/);
+                                    if (match) {{
+                                        const count = parseInt(match[0]) || 0;
+                                        if (count > 0) {{
+                                            countEl.textContent = countEl.textContent.replace(match[0], count - 1);
+                                        }}
+                                    }}
+                                }}
+                            }}, 300);
+                        }}
+                        showToast(data.message || 'Item deleted successfully!', 'success');
+                    }} else {{
+                        showToast(data.message || 'Failed to delete item.', 'danger');
+                    }}
+                }})
+                .catch(err => {{
+                    showToast(err.message || 'Error occurred while deleting.', 'danger');
+                }});
+            }}
+        }});
+    </script>
 </body>
 </html>''',
 
@@ -1363,6 +1513,307 @@ loadBranches();
         </div>
     </div>
 </div>
+''',
+ 
+    'gmail_automation': '''
+<div class="page-hero mb-4">
+    <div class="page-title-block">
+        <p class="page-kicker">Automation</p>
+        <h2 class="mb-1">Gmail Notification Portal</h2>
+        <p class="text-muted mb-0">Configure Gmail SMTP credentials, trigger reminders, and broadcast announcements to faculty.</p>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Left Column: Navigation Tabs -->
+    <div class="col-md-3">
+        <div class="card">
+            <div class="list-group list-group-flush" id="gmailTabs" role="tablist">
+                <button class="list-group-item list-group-item-action active fw-bold py-3" id="tab-broadcast-btn" data-bs-toggle="pill" data-bs-target="#tab-broadcast" type="button" role="tab">
+                    📢 Broadcast Campaign
+                </button>
+                <button class="list-group-item list-group-item-action fw-bold py-3" id="tab-settings-btn" data-bs-toggle="pill" data-bs-target="#tab-settings" type="button" role="tab">
+                    ⚙️ Gmail SMTP Settings
+                </button>
+                <button class="list-group-item list-group-item-action fw-bold py-3" id="tab-logs-btn" data-bs-toggle="pill" data-bs-target="#tab-logs" type="button" role="tab">
+                    📜 Mail Delivery Logs
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Column: Tab Content -->
+    <div class="col-md-9">
+        <div class="tab-content" id="gmailTabsContent">
+            <!-- Tab 1: Broadcast Campaign -->
+            <div class="tab-pane fade show active" id="tab-broadcast" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Broadcast Email Announcement</h5></div>
+                    <div class="card-body px-4 pb-4">
+                        <form id="broadcastForm" action="/gmail-automation/send-campaign" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Select Target Faculty Coordinators</label>
+                                <div class="border rounded p-3 bg-light" style="max-height: 220px; overflow-y: auto;">
+                                    <div class="form-check mb-2 pb-2 border-bottom">
+                                        <input class="form-check-input" type="checkbox" id="selectAllFaculty">
+                                        <label class="form-check-label fw-bold" for="selectAllFaculty">Select All Faculty</label>
+                                    </div>
+                                    <div class="row">
+                                        {faculty_checkbox_list}
+                                    </div>
+                                </div>
+                                <div class="form-text">Choose coordinators to receive this broadcast. Only faculty with configured emails will be sent.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Email Subject</label>
+                                <input type="text" name="subject" class="form-control" placeholder="e.g. Schedule Update: Inauguration Date Shifted" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Email Body Message</label>
+                                <textarea name="body" class="form-control" rows="8" placeholder="Write your announcement details here..." required></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2" id="sendBroadcastBtn">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                    </svg>
+                                    Send Announcement
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab 2: Settings -->
+            <div class="tab-pane fade" id="tab-settings" role="tabpanel">
+                <div class="card mb-4">
+                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Gmail SMTP Configurations</h5></div>
+                    <div class="card-body px-4 pb-4">
+                        <form id="smtpSettingsForm" action="/gmail-automation/save-settings" method="POST">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Gmail SMTP Username (Email)</label>
+                                    <input type="email" name="gmail_username" class="form-control" value="{gmail_username}" placeholder="your.name@gmail.com" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Gmail App Password</label>
+                                    <input type="password" name="gmail_password" class="form-control" value="{gmail_password}" placeholder="xxxx xxxx xxxx xxxx" required>
+                                    <div class="form-text text-muted">Generate a 16-character Google App Password in your Google Account settings.</div>
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Sender Display Name</label>
+                                    <input type="text" name="gmail_from_name" class="form-control" value="{gmail_from_name}" placeholder="e.g. Inauguration Committee" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold">Sender Reply-To Email</label>
+                                    <input type="email" name="gmail_from_email" class="form-control" value="{gmail_from_email}" placeholder="your.name@gmail.com" required>
+                                </div>
+                            </div>
+                            <div class="mb-4 form-check">
+                                <input type="checkbox" class="form-check-input" id="gmailRemindersEnabled" name="gmail_reminders_enabled" {gmail_reminders_enabled_checked}>
+                                <label class="form-check-label fw-bold" for="gmailRemindersEnabled">Enable Automated Daily Reminder Emails</label>
+                                <div class="form-text">If enabled, the system will verify schedules and send reminders to faculty 1 day before their programs.</div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-outline-secondary" id="testSmtpBtn">Test Connection</button>
+                                <button type="submit" class="btn btn-primary">Save Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Manual Reminders Trigger</h5></div>
+                    <div class="card-body px-4 pb-4">
+                        <p class="text-muted small">Need to send tomorrow's reminders right now? Click the button below to process the reminder queue immediately.</p>
+                        <button type="button" class="btn btn-outline-primary" id="triggerRemindersBtn">Trigger Reminders Now</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab 3: Logs -->
+            <div class="tab-pane fade" id="tab-logs" role="tabpanel">
+                <div class="card">
+                    <div class="card-header bg-white pt-4 px-4 border-bottom-0"><h5 class="fw-bold mb-0">Mail Delivery Audit Trail</h5></div>
+                    <div class="card-body px-4 pb-4">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr><th>Recipient</th><th>Subject</th><th>Sent At</th><th>Status</th></tr>
+                                </thead>
+                                <tbody>
+                                    {email_log_rows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {{
+    const selectAllCheckbox = document.getElementById('selectAllFaculty');
+    const facultyCheckboxes = document.querySelectorAll('.faculty-checkbox');
+    if (selectAllCheckbox) {{
+        selectAllCheckbox.addEventListener('change', function() {{
+            facultyCheckboxes.forEach(cb => cb.checked = this.checked);
+        }});
+    }}
+    
+    // Broadcast submit
+    const broadcastForm = document.getElementById('broadcastForm');
+    if (broadcastForm) {{
+        broadcastForm.addEventListener('submit', function(e) {{
+            e.preventDefault();
+            const submitBtn = document.getElementById('sendBroadcastBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sending...';
+            
+            const formData = new FormData(this);
+            const facultyIds = [];
+            document.querySelectorAll('.faculty-checkbox:checked').forEach(cb => facultyIds.push(cb.value));
+            
+            const payload = {{
+                subject: formData.get('subject'),
+                body: formData.get('body'),
+                faculty_ids: facultyIds
+            }};
+            
+            fetch('/gmail-automation/send-campaign', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify(payload)
+            }})
+            .then(res => res.json())
+            .then(data => {{
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                    Send Announcement
+                `;
+                if (data.success) {{
+                    showToast(data.message, 'success');
+                    broadcastForm.reset();
+                    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+                }} else {{
+                    showToast(data.message, 'danger');
+                }}
+            }})
+            .catch(err => {{
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send Announcement';
+                showToast('Failed to send broadcast.', 'danger');
+            }});
+        }});
+    }}
+    
+    // Test SMTP
+    const testSmtpBtn = document.getElementById('testSmtpBtn');
+    if (testSmtpBtn) {{
+        testSmtpBtn.addEventListener('click', function() {{
+            const form = document.getElementById('smtpSettingsForm');
+            const formData = new FormData(form);
+            const payload = {{
+                gmail_username: formData.get('gmail_username'),
+                gmail_password: formData.get('gmail_password')
+            }};
+            
+            testSmtpBtn.disabled = true;
+            testSmtpBtn.textContent = 'Testing...';
+            
+            fetch('/gmail-automation/test-connection', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify(payload)
+            }})
+            .then(res => res.json())
+            .then(data => {{
+                testSmtpBtn.disabled = false;
+                testSmtpBtn.textContent = 'Test Connection';
+                if (data.success) {{
+                    showToast(data.message, 'success');
+                }} else {{
+                    showToast(data.message, 'danger');
+                }}
+            }})
+            .catch(err => {{
+                testSmtpBtn.disabled = false;
+                testSmtpBtn.textContent = 'Test Connection';
+                showToast('SMTP Test Connection failed.', 'danger');
+            }});
+        }});
+    }}
+    
+    // Settings submit
+    const settingsForm = document.getElementById('smtpSettingsForm');
+    if (settingsForm) {{
+        settingsForm.addEventListener('submit', function(e) {{
+            e.preventDefault();
+            const formData = new FormData(this);
+            const payload = {{
+                gmail_username: formData.get('gmail_username'),
+                gmail_password: formData.get('gmail_password'),
+                gmail_from_name: formData.get('gmail_from_name'),
+                gmail_from_email: formData.get('gmail_from_email'),
+                gmail_reminders_enabled: formData.get('gmail_reminders_enabled') ? 'true' : 'false'
+            }};
+            
+            fetch('/gmail-automation/save-settings', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify(payload)
+            }})
+            .then(res => res.json())
+            .then(data => {{
+                if (data.success) {{
+                    showToast(data.message, 'success');
+                }} else {{
+                    showToast(data.message, 'danger');
+                }}
+            }})
+            .catch(err => {{
+                showToast('Failed to save settings.', 'danger');
+            }});
+        }});
+    }}
+    
+    // Trigger reminders
+    const triggerRemindersBtn = document.getElementById('triggerRemindersBtn');
+    if (triggerRemindersBtn) {{
+        triggerRemindersBtn.addEventListener('click', function() {{
+            triggerRemindersBtn.disabled = true;
+            triggerRemindersBtn.textContent = 'Triggering...';
+            
+            fetch('/send-reminders', {{ method: 'POST' }})
+            .then(res => res.json())
+            .then(data => {{
+                triggerRemindersBtn.disabled = false;
+                triggerRemindersBtn.textContent = 'Trigger Reminders Now';
+                if (data.success) {{
+                    showToast(data.message || 'Reminder emails triggered successfully!', 'success');
+                }} else {{
+                    showToast(data.message || 'Failed to send reminders.', 'danger');
+                }}
+            }})
+            .catch(err => {{
+                triggerRemindersBtn.disabled = false;
+                triggerRemindersBtn.textContent = 'Trigger Reminders Now';
+                showToast('Failed to trigger reminders.', 'danger');
+            }});
+        }});
+    }}
+}});
+</script>
 ''',
 
     'event_list': '''
@@ -2226,6 +2677,8 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_faculty_list(query)
         elif path == '/faculty/import':
             self.handle_faculty_import_get()
+        elif path == '/gmail-automation':
+            self.handle_gmail_automation_get()
         elif path == '/faculty/import/template':
             self.handle_faculty_template_download()
         elif path == '/faculty/add':
@@ -2309,6 +2762,12 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_check_conflicts(body)
         elif path == '/send-reminders':
             self.handle_send_reminders()
+        elif path == '/gmail-automation/save-settings':
+            self.handle_save_settings_post(body)
+        elif path == '/gmail-automation/test-connection':
+            self.handle_test_connection_post(body)
+        elif path == '/gmail-automation/send-campaign':
+            self.handle_send_campaign_post(body)
         else:
             self.send_error(404)
 
@@ -3815,7 +4274,10 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         db.execute('DELETE FROM event WHERE id = ?', (event_id,))
         db.commit()
         db.close()
-        self.send_redirect('/events', 'Event deleted successfully!')
+        if 'application/json' in self.headers.get('Accept', ''):
+            self.send_json({'success': True, 'message': 'Event deleted successfully!'})
+        else:
+            self.send_redirect('/events', 'Event deleted successfully!')
 
     def handle_api_get(self, path, query):
         if path == '/api/branches':
@@ -4192,14 +4654,20 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         assigned_count = db.execute('SELECT COUNT(*) FROM event_faculty WHERE faculty_id = ?', (faculty_id,)).fetchone()[0]
         if assigned_count:
             db.close()
-            self.send_redirect('/faculty', 'Cannot delete faculty assigned to events.')
+            if 'application/json' in self.headers.get('Accept', ''):
+                self.send_json({'success': False, 'message': 'Cannot delete faculty assigned to events.'})
+            else:
+                self.send_redirect('/faculty', 'Cannot delete faculty assigned to events.')
             return
         db.execute('DELETE FROM faculty_availability WHERE faculty_id = ?', (faculty_id,))
         db.execute('DELETE FROM faculty_busy_slot WHERE faculty_id = ?', (faculty_id,))
         db.execute('DELETE FROM faculty WHERE id = ?', (faculty_id,))
         db.commit()
         db.close()
-        self.send_redirect('/faculty', 'Faculty deleted!')
+        if 'application/json' in self.headers.get('Accept', ''):
+            self.send_json({'success': True, 'message': 'Faculty deleted!'})
+        else:
+            self.send_redirect('/faculty', 'Faculty deleted!')
 
     def handle_faculty_availability(self, faculty_id):
         db = get_db()
@@ -4377,12 +4845,18 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         assigned_count = db.execute('SELECT COUNT(*) FROM event WHERE hall_id = ?', (hall_id,)).fetchone()[0]
         if assigned_count:
             db.close()
-            self.send_redirect('/halls', 'Cannot delete hall assigned to events.')
+            if 'application/json' in self.headers.get('Accept', ''):
+                self.send_json({'success': False, 'message': 'Cannot delete hall assigned to events.'})
+            else:
+                self.send_redirect('/halls', 'Cannot delete hall assigned to events.')
             return
         db.execute('DELETE FROM hall WHERE id = ?', (hall_id,))
         db.commit()
         db.close()
-        self.send_redirect('/halls', 'Hall deleted!')
+        if 'application/json' in self.headers.get('Accept', ''):
+            self.send_json({'success': True, 'message': 'Hall deleted!'})
+        else:
+            self.send_redirect('/halls', 'Hall deleted!')
 
     def handle_send_reminders(self):
         success = send_tomorrow_event_reminders()
@@ -4390,6 +4864,175 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json({'success': True, 'message': 'Reminder emails sent successfully'})
         else:
             self.send_json({'success': False, 'message': 'Reminder emails could not be sent'}, 500)
+ 
+    def handle_gmail_automation_get(self):
+        db = get_db()
+        faculty_list = db.execute('SELECT id, faculty_name, department, email FROM faculty WHERE email IS NOT NULL AND email != "" ORDER BY department, faculty_name').fetchall()
+        
+        checkbox_list = ''
+        for f in faculty_list:
+            checkbox_list += f'''
+            <div class="col-md-6 mb-2">
+                <div class="form-check">
+                    <input class="form-check-input faculty-checkbox" type="checkbox" value="{f['id']}" id="fac_{f['id']}">
+                    <label class="form-check-label small" for="fac_{f['id']}">
+                        {display_text(f['faculty_name'])} <span class="text-muted">({display_text(f['department'])} - {display_text(f['email'])})</span>
+                    </label>
+                </div>
+            </div>
+            '''
+            
+        # Get settings values
+        settings = {}
+        rows = db.execute('SELECT key, value FROM settings').fetchall()
+        for row in rows:
+            settings[row['key']] = row['value']
+            
+        gmail_username = settings.get('gmail_username') or SMTP_USERNAME
+        gmail_password = settings.get('gmail_password') or SMTP_PASSWORD
+        gmail_from_name = settings.get('gmail_from_name') or SMTP_FROM_NAME
+        gmail_from_email = settings.get('gmail_from_email') or SMTP_FROM_EMAIL
+        gmail_reminders_enabled = settings.get('gmail_reminders_enabled', 'true')
+        gmail_reminders_enabled_checked = 'checked' if gmail_reminders_enabled.lower() == 'true' else ''
+        
+        # Get recent log rows
+        logs = db.execute('SELECT * FROM email_log ORDER BY sent_at DESC LIMIT 50').fetchall()
+        log_rows = ''
+        for log in logs:
+            status_badge = f'<span class="badge bg-success">Sent</span>' if log['status'] == 'Sent' else f'<span class="badge bg-danger" title="{escape_html(log["error_message"] or "")}">Failed</span>'
+            log_rows += f'''
+            <tr>
+                <td>{display_text(log['recipient'])}</td>
+                <td>{display_text(log['subject'])}</td>
+                <td>{display_text(log['sent_at'])}</td>
+                <td>{status_badge}</td>
+            </tr>
+            '''
+        if not logs:
+            log_rows = '<tr><td colspan="4" class="text-center text-muted">No emails have been sent yet.</td></tr>'
+            
+        db.close()
+        
+        html = self.render_template('gmail_automation',
+            title='Gmail Automation',
+            faculty_checkbox_list=checkbox_list,
+            gmail_username=escape_html(gmail_username),
+            gmail_password=escape_html(gmail_password),
+            gmail_from_name=escape_html(gmail_from_name),
+            gmail_from_email=escape_html(gmail_from_email),
+            gmail_reminders_enabled_checked=gmail_reminders_enabled_checked,
+            email_log_rows=log_rows)
+            
+        self.send_html(html)
+ 
+    def handle_save_settings_post(self, body):
+        try:
+            payload = json.loads(body)
+            username = payload.get('gmail_username', '').strip()
+            password = payload.get('gmail_password', '').strip()
+            from_name = payload.get('gmail_from_name', '').strip()
+            from_email = payload.get('gmail_from_email', '').strip()
+            reminders_enabled = payload.get('gmail_reminders_enabled', 'true')
+            
+            db = get_db()
+            db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_username', username))
+            db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_password', password))
+            db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_from_name', from_name))
+            db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_from_email', from_email))
+            db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ('gmail_reminders_enabled', reminders_enabled))
+            db.commit()
+            db.close()
+            
+            self.send_json({'success': True, 'message': 'Gmail SMTP settings saved successfully!'})
+        except Exception as e:
+            self.send_json({'success': False, 'message': f'Failed to save settings: {str(e)}'})
+ 
+    def handle_test_connection_post(self, body):
+        try:
+            payload = json.loads(body)
+            username = payload.get('gmail_username', '').strip()
+            password = payload.get('gmail_password', '').strip()
+            
+            if not username or not password:
+                self.send_json({'success': False, 'message': 'Please provide both username and password.'})
+                return
+                
+            print(f'Testing Gmail connection for {username}...')
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.login(username, password)
+                
+            self.send_json({'success': True, 'message': 'Gmail SMTP connection test successful!'})
+        except Exception as e:
+            self.send_json({'success': False, 'message': f'Connection test failed: {str(e)}'})
+ 
+    def handle_send_campaign_post(self, body):
+        try:
+            payload = json.loads(body)
+            subject = payload.get('subject', '').strip()
+            msg_body = payload.get('body', '').strip()
+            faculty_ids = payload.get('faculty_ids', [])
+            
+            if not subject or not msg_body or not faculty_ids:
+                self.send_json({'success': False, 'message': 'Please select faculty and provide subject and body.'})
+                return
+                
+            cfg = get_smtp_settings()
+            if not cfg['username'] or not cfg['password']:
+                self.send_json({'success': False, 'message': 'Please configure Gmail SMTP credentials first.'})
+                return
+                
+            db = get_db()
+            placeholders = ','.join('?' for _ in faculty_ids)
+            faculty_members = db.execute(f'SELECT faculty_name, email FROM faculty WHERE id IN ({placeholders}) AND email IS NOT NULL AND email != ""', faculty_ids).fetchall()
+            
+            if not faculty_members:
+                db.close()
+                self.send_json({'success': False, 'message': 'No selected faculty members have email addresses.'})
+                return
+                
+            sent_count = 0
+            failed_count = 0
+            
+            # Send emails
+            try:
+                with smtplib.SMTP(cfg['host'], cfg['port'], timeout=30) as smtp:
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.login(cfg['username'], cfg['password'])
+                    
+                    for f in faculty_members:
+                        recipient = f['email']
+                        # Build message
+                        message = EmailMessage()
+                        message['Subject'] = subject
+                        message['From'] = f'{cfg["from_name"]} <{cfg["from_email"]}>' if cfg['from_name'] else cfg['from_email']
+                        message['To'] = recipient
+                        
+                        body_content = f"Dear {f['faculty_name']},\n\n{msg_body}"
+                        message.set_content(body_content)
+                        
+                        try:
+                            smtp.send_message(message)
+                            db.execute('INSERT INTO email_log (recipient, subject, body, status) VALUES (?, ?, ?, ?)',
+                                       (recipient, subject, body_content, 'Sent'))
+                            sent_count += 1
+                        except Exception as inner_err:
+                            db.execute('INSERT INTO email_log (recipient, subject, body, status, error_message) VALUES (?, ?, ?, ?, ?)',
+                                       (recipient, subject, body_content, 'Failed', str(inner_err)))
+                            failed_count += 1
+            except Exception as outer_err:
+                db.close()
+                self.send_json({'success': False, 'message': f'SMTP session failed: {str(outer_err)}'})
+                return
+                
+            db.commit()
+            db.close()
+            
+            self.send_json({'success': True, 'message': f'Broadcast completed: {sent_count} sent successfully, {failed_count} failed.'})
+        except Exception as e:
+            self.send_json({'success': False, 'message': f'Broadcast failed: {str(e)}'})
 
 
 def main():
