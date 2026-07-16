@@ -481,43 +481,33 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
     </div>
 
     <main class="container py-5 d-flex align-items-center justify-content-center" style="min-height: 100vh; position: relative; z-index: 2;">
-        <div class="login-card">
-            <!-- Left Panel: Branding -->
-            <div class="login-brand-panel">
-                <div class="brand-panel-center">
-                    <div class="brand-logo-glow">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <div class="card border-0 shadow-lg p-4 rounded-4" style="max-width: 440px; width: 100%; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(15px); border: 1px solid rgba(164, 18, 63, 0.08) !important;">
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center mb-3" style="width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(135deg, #620a25 0%, #a4123f 100%); color: white; box-shadow: 0 8px 20px rgba(164, 18, 63, 0.25);">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                             <line x1="16" y1="2" x2="16" y2="6"></line>
                             <line x1="8" y1="2" x2="8" y2="6"></line>
                             <line x1="3" y1="10" x2="21" y2="10"></line>
-                            <path d="M8 14h.01"></path>
-                            <path d="M12 14h.01"></path>
-                            <path d="M16 14h.01"></path>
-                            <path d="M8 18h.01"></path>
-                            <path d="M12 18h.01"></path>
-                            <path d="M16 18h.01"></path>
                         </svg>
                     </div>
-                    <h1 class="brand-title-large">Event Scheduler</h1>
-                    <p class="brand-subtitle-large">Inauguration &amp; Event Planner</p>
+                    <h3 class="fw-bold mb-1">Event Scheduler</h3>
+                    <p class="text-muted small">Inauguration &amp; Event Planner</p>
                 </div>
-                
-                <div class="brand-panel-footer">
-                    <span class="system-badge">v2.0 Stable</span>
-                </div>
-            </div>
 
-            <!-- Right Panel: Login Form -->
-            <div class="login-form-panel">
-                <div class="form-header">
-                    <h2>Welcome Back</h2>
-                    <p class="form-subtitle">Enter your details to manage the portal</p>
+                <div class="text-center mb-4">
+                    <h5 class="fw-bold text-dark">Sign In</h5>
+                    <p class="text-muted small mb-0">Enter your credentials to access the dashboard</p>
                 </div>
-                
-                <form action="/login" id="loginForm" method="POST" onsubmit="handleFormSubmit(event)">
+
+                <form action="/login" id="loginForm" method="POST" onsubmit="handleFormSubmit(event)" autocomplete="off">
+                    <!-- Prevent chrome / browser autofill -->
+                    <input type="text" style="display:none" name="fake_username_prevent_autofill">
+                    <input type="password" style="display:none" name="fake_password_prevent_autofill">
+
                     <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
+                        <label for="username" class="form-label fw-semibold text-muted small">Username</label>
                         <div class="input-group login-input-group">
                             <span class="input-group-text">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -525,12 +515,12 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
                                     <circle cx="12" cy="7" r="4"></circle>
                                 </svg>
                             </span>
-                            <input type="text" class="form-control" id="username" name="username" placeholder="admin" required autocomplete="username">
+                            <input type="text" class="form-control" id="username" name="username" placeholder="Username" required autocomplete="new-password">
                         </div>
                     </div>
                     
                     <div class="mb-4">
-                        <label for="password" class="form-label">Password</label>
+                        <label for="password" class="form-label fw-semibold text-muted small">Password</label>
                         <div class="input-group login-input-group">
                             <span class="input-group-text">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -538,7 +528,7 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
                                     <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                                 </svg>
                             </span>
-                            <input type="password" class="form-control" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+                            <input type="password" class="form-control" id="password" name="password" placeholder="••••••••" required autocomplete="new-password">
                             <button class="btn toggle-password" type="button" onclick="togglePasswordVisibility()" aria-label="Toggle Password Visibility">
                                 <svg xmlns="http://www.w3.org/2000/svg" id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -557,17 +547,6 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
                         <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status" aria-hidden="true"></span>
                     </button>
                 </form>
-                
-                <div class="demo-credentials-section">
-                    <div class="demo-credentials-header">
-                        <div class="line"></div>
-                        <span class="text">Or Use Credentials</span>
-                        <div class="line"></div>
-                    </div>
-                    <button type="button" class="btn btn-demo-autofill w-100" id="autofillBtn" onclick="autofillDemo()">
-                        <span class="flash-icon">⚡</span> Auto-fill Demo Account
-                    </button>
-                </div>
             </div>
         </div>
     </main>
@@ -580,53 +559,6 @@ LOGIN_TEMPLATE = '''<!DOCTYPE html>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function autofillDemo() {{
-            const userField = document.getElementById('username');
-            const passField = document.getElementById('password');
-            const autofillBtn = document.getElementById('autofillBtn');
-            
-            autofillBtn.disabled = true;
-            autofillBtn.classList.add('typing');
-            
-            userField.value = '';
-            passField.value = '';
-            
-            const usernameVal = 'admin';
-            const passwordVal = 'admin123';
-            
-            let i = 0;
-            function typeUsername() {{
-                if (i < usernameVal.length) {{
-                    userField.value += usernameVal.charAt(i);
-                    i++;
-                    setTimeout(typeUsername, 80);
-                }} else {{
-                    i = 0;
-                    setTimeout(typePassword, 120);
-                }}
-            }}
-            
-            function typePassword() {{
-                if (i < passwordVal.length) {{
-                    passField.value += passwordVal.charAt(i);
-                    i++;
-                    setTimeout(typePassword, 80);
-                }} else {{
-                    autofillBtn.disabled = false;
-                    autofillBtn.classList.remove('typing');
-                    
-                    userField.classList.add('autofilled');
-                    passField.classList.add('autofilled');
-                    setTimeout(() => {{
-                        userField.classList.remove('autofilled');
-                        passField.classList.remove('autofilled');
-                    }}, 800);
-                }}
-            }}
-            
-            typeUsername();
-        }}
-
         function togglePasswordVisibility() {{
             const passField = document.getElementById('password');
             const eyeIcon = document.getElementById('eyeIcon');
@@ -684,7 +616,7 @@ TEMPLATES = {
                     <li class="nav-item"><a class="nav-link" href="/events">Events</a></li>
                     <li class="nav-item"><a class="nav-link" href="/faculty">Faculty</a></li>
                     <li class="nav-item"><a class="nav-link" href="/halls">Halls</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/gmail-automation">Gmail Automation</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/gmail-automation">Settings</a></li>
                     <li class="nav-item"><a class="nav-link" href="/upload-excel">Import Excel</a></li>
                     <li class="nav-item"><a class="nav-link" href="/logout">Logout</a></li>
                 </ul>
