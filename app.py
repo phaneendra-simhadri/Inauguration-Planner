@@ -1171,11 +1171,15 @@ renderCalendar();
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="selectFaculty" class="form-label">Faculty Coordinators (select multiple)</label>
-                            <select id="selectFaculty" class="form-select" multiple style="min-height: 100px;">
-                                <option value="">-- Select Faculty --</option>
-                            </select>
-                            <small class="text-muted">Hold Ctrl/Cmd to select multiple faculty members</small>
+                            <label class="form-label fw-bold">Faculty Coordinators</label>
+                            <div class="mb-2">
+                                <input type="search" id="facultySearchInput" class="form-control form-control-sm" placeholder="Search faculty by name or department...">
+                            </div>
+                            <div class="border rounded p-3 bg-light" style="max-height: 150px; overflow-y: auto;">
+                                <div class="row" id="facultyCheckboxList">
+                                    <div class="col-12 text-muted small">Select time slot to view available faculty</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -1337,20 +1341,34 @@ async function showEventForm() {{
     const hallSelect = document.getElementById('selectHall');
     hallSelect.innerHTML = '<option value="">-- Select Hall --</option>';
     halls.forEach(h => hallSelect.innerHTML += `<option value="${{h.id}}">${{escapeHtml(h.name)}} (Capacity: ${{escapeHtml(h.capacity)}})</option>`);
-    const facultySelect = document.getElementById('selectFaculty');
-    facultySelect.innerHTML = '';
-    faculty.forEach(f => facultySelect.innerHTML += `<option value="${{f.id}}">${{escapeHtml(f.name)}} (${{escapeHtml(f.department)}})</option>`);
+    const facultyContainer = document.getElementById('facultyCheckboxList');
+    facultyContainer.innerHTML = '';
+    if (faculty.length === 0) {{
+        facultyContainer.innerHTML = '<div class="col-12 text-muted small">No faculty available for this slot</div>';
+    }} else {{
+        faculty.forEach(f => {{
+            facultyContainer.innerHTML += `
+                <div class="col-md-6 mb-2 faculty-item-wrapper" data-name="${{escapeHtml(f.name).toLowerCase()}}" data-dept="${{escapeHtml(f.department).toLowerCase()}}">
+                    <div class="form-check">
+                        <input class="form-check-input faculty-checkbox" type="checkbox" value="${{f.id}}" id="fac_${{f.id}}">
+                        <label class="form-check-label small" for="fac_${{f.id}}">
+                            ${{escapeHtml(f.name)}} <span class="text-muted">(${{escapeHtml(f.department)}})</span>
+                        </label>
+                    </div>
+                </div>
+            `;
+        }});
+    }}
     document.getElementById('conflictAlert').style.display = 'none';
 }}
-
+ 
 document.getElementById('eventForm').addEventListener('submit', async function(e) {{
     e.preventDefault();
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Creating...';
     
-    const facultySelect = document.getElementById('selectFaculty');
-    const selectedFaculty = Array.from(facultySelect.selectedOptions).map(option => parseInt(option.value));
+    const selectedFaculty = Array.from(document.querySelectorAll('.faculty-checkbox:checked')).map(cb => parseInt(cb.value));
     
     const data = {{
         event_name: document.getElementById('eventName').value,
@@ -1410,8 +1428,23 @@ document.getElementById('eventForm').addEventListener('submit', async function(e
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Event';
     }}
+    const facultySearchInput = document.getElementById('facultySearchInput');
+    if (facultySearchInput) {{
+        facultySearchInput.addEventListener('input', function() {{
+            const query = this.value.toLowerCase().trim();
+            document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
+                const name = item.dataset.name || '';
+                const dept = item.dataset.dept || '';
+                if (name.includes(query) || dept.includes(query)) {{
+                    item.style.setProperty('display', '', 'important');
+                }} else {{
+                    item.style.setProperty('display', 'none', 'important');
+                }}
+            }});
+        }});
+    }}
 }});
-
+ 
 loadBranches();
 </script>
 ''',
@@ -2048,11 +2081,15 @@ document.addEventListener('DOMContentLoaded', function() {{
                             </select>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="facultySelect" class="form-label">Faculty Coordinators (select multiple)</label>
-                            <select id="facultySelect" class="form-select" multiple style="min-height: 100px;">
-                                {faculty_options}
-                            </select>
-                            <small class="text-muted">Hold Ctrl/Cmd to select multiple faculty members</small>
+                            <label class="form-label fw-bold">Faculty Coordinators</label>
+                            <div class="mb-2">
+                                <input type="search" id="facultySearchInput" class="form-control form-control-sm" placeholder="Search faculty by name or department...">
+                            </div>
+                            <div class="border rounded p-3 bg-light" style="max-height: 150px; overflow-y: auto;">
+                                <div class="row" id="facultyCheckboxList">
+                                    {faculty_checkboxes}
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="mb-3">
@@ -2172,8 +2209,7 @@ document.getElementById('editEventForm').addEventListener('submit', async functi
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving...';
     
-    const facultySelect = document.getElementById('facultySelect');
-    const selectedFaculty = Array.from(facultySelect.selectedOptions).map(option => parseInt(option.value));
+    const selectedFaculty = Array.from(document.querySelectorAll('.faculty-checkbox:checked')).map(cb => parseInt(cb.value));
     
     const data = {{
         event_name: document.getElementById('eventName').value,
@@ -2212,8 +2248,23 @@ document.getElementById('editEventForm').addEventListener('submit', async functi
         submitBtn.disabled = false;
         submitBtn.textContent = 'Save Changes';
     }}
+    const facultySearchInput = document.getElementById('facultySearchInput');
+    if (facultySearchInput) {{
+        facultySearchInput.addEventListener('input', function() {{
+            const query = this.value.toLowerCase().trim();
+            document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
+                const name = item.dataset.name || '';
+                const dept = item.dataset.dept || '';
+                if (name.includes(query) || dept.includes(query)) {{
+                    item.style.setProperty('display', '', 'important');
+                }} else {{
+                    item.style.setProperty('display', 'none', 'important');
+                }}
+            }});
+        }});
+    }}
 }});
-
+ 
 loadEditBranches();
 </script>
 ''',
@@ -4091,10 +4142,19 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             selected = 'selected' if h['id'] == event['hall_id'] else ''
             hall_options += f'<option value="{h["id"]}" {selected}>{display_text(h["hall_name"], "")} (Capacity: {display_text(h["capacity"], "")})</option>'
 
-        faculty_options = ''
+        faculty_checkboxes = ''
         for f in faculties:
-            selected = 'selected' if f['id'] in assigned_ids else ''
-            faculty_options += f'<option value="{f["id"]}" {selected}>{display_text(f["faculty_name"], "")} ({display_text(f["department"], "")})</option>'
+            checked = 'checked' if f['id'] in assigned_ids else ''
+            faculty_checkboxes += f'''
+            <div class="col-md-6 mb-2 faculty-item-wrapper" data-name="{display_text(f['faculty_name'], '').lower()}" data-dept="{display_text(f['department'], '').lower()}">
+                <div class="form-check">
+                    <input class="form-check-input faculty-checkbox" type="checkbox" value="{f['id']}" id="fac_{f['id']}" {checked}>
+                    <label class="form-check-label small" for="fac_{f['id']}">
+                        {display_text(f['faculty_name'], '')} <span class="text-muted">({display_text(f['department'], '')})</span>
+                    </label>
+                </div>
+            </div>
+            '''
 
         html = self.render_template('edit_event',
             title='Edit Event',
@@ -4109,7 +4169,7 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             slot_options=slot_options,
             type_options=type_options,
             hall_options=hall_options,
-            faculty_options=faculty_options)
+            faculty_checkboxes=faculty_checkboxes)
 
         self.send_html(html)
 
