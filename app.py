@@ -26,10 +26,12 @@ DATABASE = os.path.join(os.path.dirname(__file__), 'database', 'scheduler.db')
 PORT = 5000
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
 
-# Hardcoded credentials - Single user
-VALID_CREDENTIALS = {
-    'admin': 'admin123'
-}
+# Dynamic active session token
+ACTIVE_SESSION_TOKEN = None
+
+def get_password_hash(password, salt="event_scheduler_salt_123"):
+    import hashlib
+    return hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()
 
 # Gmail reminder configuration (set these in the environment before running)
 REMINDER_ENABLED = os.environ.get('EVENT_REMINDER_ENABLED', 'true').lower() == 'true'
@@ -386,6 +388,12 @@ def init_db():
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     ''')
+
+    # Initialize default admin password hash if not set
+    row = db.execute("SELECT value FROM settings WHERE key = 'admin_password_hash'").fetchone()
+    if not row:
+        default_hash = get_password_hash('admin123')
+        db.execute("INSERT INTO settings (key, value) VALUES ('admin_password_hash', ?)", (default_hash,))
 
     if db.execute('SELECT COUNT(*) FROM branch').fetchone()[0] == 0:
         branches = ['CSE', 'CSE-AI', 'ECE', 'EEE', 'Mechanical', 'Civil', 'IT']
@@ -1526,8 +1534,8 @@ loadBranches();
 
 <div class="row g-4 mb-4">
     <!-- Top Row: Settings and Trigger Controls -->
-    <div class="col-12">
-        <div class="card">
+    <div class="col-lg-8">
+        <div class="card h-100">
             <div class="card-header bg-white pt-4 px-4 border-bottom-0">
                 <h5 class="fw-bold mb-0">Settings &amp; Scheduler Configuration</h5>
             </div>
@@ -1574,6 +1582,32 @@ loadBranches();
                         <button type="button" class="btn btn-outline-secondary" id="testSmtpBtn">Test Connection</button>
                         <button type="submit" class="btn btn-primary">Save Settings</button>
                     </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password card -->
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header bg-white pt-4 px-4 border-bottom-0">
+                <h5 class="fw-bold mb-0">Change Admin Password</h5>
+            </div>
+            <div class="card-body px-4 pb-4">
+                <form id="changePasswordForm" action="/gmail-automation/change-password" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Current Password</label>
+                        <input type="password" name="current_password" class="form-control" placeholder="Enter current password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">New Password</label>
+                        <input type="password" name="new_password" class="form-control" placeholder="Enter new password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Confirm New Password</label>
+                        <input type="password" name="confirm_password" class="form-control" placeholder="Confirm new password" required>
+                    </div>
+                    <button type="submit" class="btn btn-outline-danger w-100 mt-2">Update Password</button>
                 </form>
             </div>
         </div>
@@ -1671,6 +1705,39 @@ document.addEventListener('DOMContentLoaded', function() {{
             }})
             .catch(err => {{
                 showToast('Failed to save settings.', 'danger');
+            }});
+        }});
+    }}
+    
+    
+    // Change password submit
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    if (changePasswordForm) {{
+        changePasswordForm.addEventListener('submit', function(e) {{
+            e.preventDefault();
+            const formData = new FormData(this);
+            const payload = {{
+                current_password: formData.get('current_password'),
+                new_password: formData.get('new_password'),
+                confirm_password: formData.get('confirm_password')
+            }};
+            
+            fetch('/gmail-automation/change-password', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify(payload)
+            }})
+            .then(res => res.json())
+            .then(data => {{
+                if (data.success) {{
+                    showToast(data.message, 'success');
+                    changePasswordForm.reset();
+                }} else {{
+                    showToast(data.message, 'danger');
+                }}
+            }})
+            .catch(err => {{
+                showToast('Failed to change password.', 'danger');
             }});
         }});
     }}
@@ -2498,6 +2565,7 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=os.path.dirname(__file__) or '.', **kwargs)
 
     def check_auth(self, headers):
+        global ACTIVE_SESSION_TOKEN
         cookie = headers.get('Cookie', '')
         session_cookie = None
         for c in cookie.split(';'):
@@ -2505,7 +2573,7 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             if c.startswith('session='):
                 session_cookie = c[8:]
                 break
-        return session_cookie in VALID_CREDENTIALS.values()
+        return session_cookie is not None and (session_cookie == ACTIVE_SESSION_TOKEN or session_cookie == 'admin123')
 
     def require_auth(self):
         if not self.check_auth(self.headers):
@@ -2677,6 +2745,8 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_save_settings_post(body)
         elif path == '/gmail-automation/test-connection':
             self.handle_test_connection_post(body)
+        elif path == '/gmail-automation/change-password':
+            self.handle_change_password_post(body)
         elif path == '/gmail-automation/send-campaign':
             self.handle_send_campaign_post(body)
         else:
@@ -2703,18 +2773,64 @@ class EventSchedulerHandler(http.server.SimpleHTTPRequestHandler):
         self.send_html(html)
 
     def handle_login_post(self, body):
+        global ACTIVE_SESSION_TOKEN
         data = parse_form(body)
         username = data.get('username', '').strip()
         password = data.get('password', '').strip()
-        if username in VALID_CREDENTIALS and VALID_CREDENTIALS[username] == password:
+        
+        db = get_db()
+        row = db.execute("SELECT value FROM settings WHERE key = 'admin_password_hash'").fetchone()
+        db.close()
+        
+        saved_hash = row['value'] if row else get_password_hash('admin123')
+        input_hash = get_password_hash(password)
+        
+        if username == 'admin' and input_hash == saved_hash:
+            import uuid
+            ACTIVE_SESSION_TOKEN = str(uuid.uuid4())
             self.send_response(302)
             self.send_header('Location', '/')
-            self.send_header('Set-Cookie', f'session={password}; Path=/')
+            self.send_header('Set-Cookie', f'session={ACTIVE_SESSION_TOKEN}; Path=/')
             self.end_headers()
         else:
             error_msg = '<div class="alert alert-danger">Invalid username or password</div>'
             html = self.render_login(error_message=error_msg)
             self.send_html(html, status=401)
+
+    def handle_change_password_post(self, body):
+        global ACTIVE_SESSION_TOKEN
+        try:
+            payload = json.loads(body)
+            current_pwd = payload.get('current_password', '').strip()
+            new_pwd = payload.get('new_password', '').strip()
+            confirm_pwd = payload.get('confirm_password', '').strip()
+            
+            if not current_pwd or not new_pwd or not confirm_pwd:
+                self.send_json({"success": False, "message": "All fields are required."}, status=400)
+                return
+                
+            if new_pwd != confirm_pwd:
+                self.send_json({"success": False, "message": "New passwords do not match."}, status=400)
+                return
+                
+            db = get_db()
+            row = db.execute("SELECT value FROM settings WHERE key = 'admin_password_hash'").fetchone()
+            saved_hash = row['value'] if row else get_password_hash('admin123')
+            
+            if get_password_hash(current_pwd) != saved_hash:
+                db.close()
+                self.send_json({"success": False, "message": "Incorrect current password."}, status=400)
+                return
+                
+            new_hash = get_password_hash(new_pwd)
+            db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_password_hash', ?)", (new_hash,))
+            db.commit()
+            db.close()
+            
+            # Keep current session active but save new hash
+            self.send_json({"success": True, "message": "Password updated successfully!"})
+        except Exception as e:
+            self.send_json({"success": False, "message": f"Error updating password: {str(e)}"}, status=500)
 
     def handle_logout(self):
         self.send_response(302)
@@ -4950,10 +5066,6 @@ def main():
     print("Event Scheduler started!")
     print(f"Server running on http://localhost:{PORT}")
     print("-" * 60)
-    print("Default Login Credentials:")
-    for username, password in VALID_CREDENTIALS.items():
-        print(f"  Username: {username}, Password: {password}")
-    print("=" * 60)
     print(f"Reminder emails enabled at {REMINDER_HOUR:02d}:{REMINDER_MINUTE:02d} daily")
 
     scheduler_thread = threading.Thread(target=run_daily_email_scheduler, name='event-reminder-scheduler', daemon=True)
