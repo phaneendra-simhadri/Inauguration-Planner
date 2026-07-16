@@ -1428,22 +1428,23 @@ document.getElementById('eventForm').addEventListener('submit', async function(e
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create Event';
     }}
-    const facultySearchInput = document.getElementById('facultySearchInput');
-    if (facultySearchInput) {{
-        facultySearchInput.addEventListener('input', function() {{
-            const query = this.value.toLowerCase().trim();
-            document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
-                const name = item.dataset.name || '';
-                const dept = item.dataset.dept || '';
-                if (name.includes(query) || dept.includes(query)) {{
-                    item.style.setProperty('display', '', 'important');
-                }} else {{
-                    item.style.setProperty('display', 'none', 'important');
-                }}
-            }});
-        }});
-    }}
 }});
+ 
+const facultySearchInput = document.getElementById('facultySearchInput');
+if (facultySearchInput) {{
+    facultySearchInput.addEventListener('input', function() {{
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
+            const name = item.dataset.name || '';
+            const dept = item.dataset.dept || '';
+            if (name.includes(query) || dept.includes(query)) {{
+                item.style.setProperty('display', '', 'important');
+            }} else {{
+                item.style.setProperty('display', 'none', 'important');
+            }}
+        }});
+    }});
+}}
  
 loadBranches();
 </script>
@@ -2238,22 +2239,23 @@ document.getElementById('editEventForm').addEventListener('submit', async functi
         submitBtn.disabled = false;
         submitBtn.textContent = 'Save Changes';
     }}
-    const facultySearchInput = document.getElementById('facultySearchInput');
-    if (facultySearchInput) {{
-        facultySearchInput.addEventListener('input', function() {{
-            const query = this.value.toLowerCase().trim();
-            document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
-                const name = item.dataset.name || '';
-                const dept = item.dataset.dept || '';
-                if (name.includes(query) || dept.includes(query)) {{
-                    item.style.setProperty('display', '', 'important');
-                }} else {{
-                    item.style.setProperty('display', 'none', 'important');
-                }}
-            }});
-        }});
-    }}
 }});
+ 
+const facultySearchInput = document.getElementById('facultySearchInput');
+if (facultySearchInput) {{
+    facultySearchInput.addEventListener('input', function() {{
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('.faculty-item-wrapper').forEach(item => {{
+            const name = item.dataset.name || '';
+            const dept = item.dataset.dept || '';
+            if (name.includes(query) || dept.includes(query)) {{
+                item.style.setProperty('display', '', 'important');
+            }} else {{
+                item.style.setProperty('display', 'none', 'important');
+            }}
+        }});
+    }});
+}}
  
 loadEditBranches();
 </script>
